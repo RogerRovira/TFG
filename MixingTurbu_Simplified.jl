@@ -22,33 +22,33 @@ using FFTW
 function update_turbu_and_concentration(theta, conc, A, R, S, Diff, ops)
     
     #START FILTERING THETA
-    theta_tr = ops.dealias .* fft(theta);
-    theta_DA = real.(ifft(theta_tr))
-    
-    sin2t_tr =  fft( sin.(2 * theta_DA) );
-    cos2t_tr =  fft( cos.(2 * theta_DA) );
-    
+    theta_tr = ops.dealias .* (ops.fft_plan * complex.(theta));
+    theta_DA = real.(ops.ifft_plan * theta_tr)
+
+    sin2t_tr =  ops.fft_plan * complex.( sin.(2 * theta_DA) );
+    cos2t_tr =  ops.fft_plan * complex.( cos.(2 * theta_DA) );
+
     #COMPUTE THE DERIVATIVES IN FOURIER SPACE AND THEN BACKTRANSFORM
-    dxthet = real.(ifft( im * ops.dealias .* ops.kx .* theta_tr ))
-    dythet = real.(ifft( im * ops.dealias .* ops.ky .* theta_tr ))
+    dxthet = real.(ops.ifft_plan * ( im * ops.dealias .* ops.kx .* theta_tr ))
+    dythet = real.(ops.ifft_plan * ( im * ops.dealias .* ops.ky .* theta_tr ))
     
     
     D_tr =   ops.dealias .* (ops.kx2_ky2 .* sin2t_tr ./2 .- ops.kxy .* cos2t_tr ) ;
     
     #THIS TERM IS CALLED ERIKSEN STRESS.
-    eric = real.(ifft( im * ops.dealias .* ops.kx .* ops.k2 .* theta_tr ) ) .*  dythet .- real.( ifft( im * ops.dealias .* ops.ky .* ops.k2 .* theta_tr  ) ) .*  dxthet;
-    eric_tr = ops.dealias .* fft( eric );
+    eric = real.(ops.ifft_plan * ( im * ops.dealias .* ops.kx .* ops.k2 .* theta_tr ) ) .*  dythet .- real.( ops.ifft_plan * ( im * ops.dealias .* ops.ky .* ops.k2 .* theta_tr  ) ) .*  dxthet;
+    eric_tr = ops.dealias .* (ops.fft_plan * complex.( eric ));
     
     #SOLUTION OF THE EQUATION FOR PSI, INVOLVING NABLA^4
     psi_tr =  ( S  * D_tr .+ R/A * eric_tr .- R/(2 * A ) * ops.dealias .*  ops.k4_im .* theta_tr )./ops.k4_im;
     psi_tr = ops.dealias .* psi_tr
     
     #THEN PREPARING TERMS FOR THE EVOLUTION OF THETA
-    dxpsi = real.(ifft( im * ops.dealias .* ops.kx .* psi_tr) )
-    dypsi = real.(ifft( im * ops.dealias .* ops.ky .* psi_tr) )
-    
+    dxpsi = real.(ops.ifft_plan * ( im * ops.dealias .* ops.kx .* psi_tr) )
+    dypsi = real.(ops.ifft_plan * ( im * ops.dealias .* ops.ky .* psi_tr) )
+
     cov_der_the = dxpsi .* dythet .- dypsi  .* dxthet;
-    cov_der_the_tr = ops.dealias .* fft( cov_der_the )
+    cov_der_the_tr = ops.dealias .* (ops.fft_plan * complex.( cov_der_the ))
     
     #IN THIS STEP WE FINALLY UPDATE THETA!
     #theta_new_tr = theta_tr.+ dt.*( cov_der_the_tr  .+ dealias .* k2 .* (psi_tr ./2 .- theta_tr./A) );
@@ -56,21 +56,21 @@ function update_turbu_and_concentration(theta, conc, A, R, S, Diff, ops)
     #ALTERNATIVE!!! SEMI-IMPLICIT EULER (IMEX) TO INCREASE STABILITY
     theta_new_tr = (theta_tr .+ ops.dt .* (cov_der_the_tr .+ ops.dealias .* ops.k2 .* psi_tr ./ 2)) ./ (1 .+ ops.dt .* ops.k2 ./ A);
 
-    theta_out = real.( ifft( theta_new_tr ) ) ;
-   
+    theta_out = real.( ops.ifft_plan * theta_new_tr ) ;
+
     #UPDATE THE CONCENTRATION FIELD
-    conc_tr = ops.dealias .* fft(conc);
+    conc_tr = ops.dealias .* (ops.fft_plan * complex.(conc));
     #conc = real.(ifft( conc_tr ));
-   
-    dxconc  = real.( ifft(  im .* ops.kx .* conc_tr ));
-    dyconc  = real.( ifft(  im .* ops.ky .* conc_tr ));
+
+    dxconc  = real.( ops.ifft_plan * (  im .* ops.kx .* conc_tr ));
+    dyconc  = real.( ops.ifft_plan * (  im .* ops.ky .* conc_tr ));
     #d2conc = real.( ifft( - k2 .* conc_tr));
    
     covc_temp = dypsi .* dxconc .- dxpsi .* dyconc;
     #ALTERNATIVE!!! SEMI-IMPLICIT EULER (IMEX) TO INCREASE STABILITY
-    covc_tr   = ops.dealias .* fft( covc_temp )
+    covc_tr   = ops.dealias .* (ops.fft_plan * complex.( covc_temp ))
     conc_tr   = ( conc_tr .- ops.dt .* covc_tr ) ./ ( 1 .+ ops.dt .* (Diff/A) .* ops.k2 )
-    conc_out  = real.( ifft( conc_tr ) )
+    conc_out  = real.( ops.ifft_plan * conc_tr )
    
     #covc = real.(ifft( dealias .* fft( covc_temp) ));
    
@@ -158,6 +158,15 @@ dealias = copy(kxy)
 dealias = fill!(dealias, 1.)
 dealias[ind_x_alias,:] .= 0.;
 dealias[:, ind_y_alias] .= 0.;
+
+# PREPLANNED FFTs: build the transform plans once and reuse them in the hot loop,
+# avoiding the per-call planning overhead of bare fft()/ifft(). The plans act on
+# (L,L) ComplexF64 arrays; plan_ifft carries the 1/N normalization, so
+# (ifft_plan * X) == ifft(X) and (fft_plan * X) == fft(X) exactly. Forward transforms
+# of real fields are fed through complex.() (what fft does internally), so results are
+# bit-identical. Rerun this cell, then the ops cell, whenever L changes.
+global fft_plan  = plan_fft(zeros(ComplexF64, L, L));
+global ifft_plan = plan_ifft(zeros(ComplexF64, L, L));
 # -
 
 # BUNDLE THE FOURIER OPERATORS (AND dt) INTO A NAMEDTUPLE.
@@ -173,6 +182,8 @@ ops = (
     k4_im   = k4_im,
     dealias = dealias,
     dt      = dt,
+    fft_plan  = fft_plan,
+    ifft_plan = ifft_plan,
 )
 
 # +
@@ -269,8 +280,8 @@ for counter = 0:n_time_steps
         # store real-valued snapshots into the concretely-typed Vector{Matrix{Float64}}
         theta_time[trunc(Int,counter/time_gap)+1] = real.(theta)
         conc_time[trunc(Int,counter/time_gap)+1] = real.(conc)
-        Ux_time[trunc(Int,counter/time_gap)+1] = real.( ifft( im * ky .* psi_tr_new) )
-        Uy_time[trunc(Int,counter/time_gap)+1] = real.( ifft( -im * kx .* psi_tr_new) )
+        Ux_time[trunc(Int,counter/time_gap)+1] = real.( ifft_plan * ( im * ky .* psi_tr_new) )
+        Uy_time[trunc(Int,counter/time_gap)+1] = real.( ifft_plan * (-im * kx .* psi_tr_new) )
         
         if any(isnan.(theta))
             print("NaNaNaN BATMAN");
