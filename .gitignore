@@ -1,0 +1,8 @@
+# Jupytext pairing: the .jl scripts are the source of truth and are versioned;
+# the .ipynb notebooks are generated/synced locally and carry outputs, so ignore them.
+*.ipynb
+.ipynb_checkpoints/
+
+# Simulation output folders produced by the solver
+COLLAPSE_L_*/
+L_*_A_*/

@@ -6,11 +6,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is a Julia-based active-nematic fluid dynamics solver for a TFG (undergraduate thesis). The solver simulates **active turbulence** in 2D using a pseudo-spectral (Fourier-space) method with explicit Euler time integration.
 
-The primary file is `STUDENTS_defect_free_turbu.ipynb` — a Jupyter notebook running Julia via IJulia.
+The primary file is `STUDENTS_defect_free_turbu.ipynb` — a Jupyter notebook running Julia via IJulia. A second, leaner solver lives in `MixingTurbu_Simplified.ipynb` (active nematic + passive-scalar mixing).
+
+## Source of truth: Jupytext-paired `.jl` files
+
+The notebooks are paired with plain-text Julia scripts via [Jupytext](https://jupytext.readthedocs.io) (light format, header `formats: ipynb,jl:light`). **The `.jl` files are the versioned source of truth**; the `.ipynb` files are generated/synced locally (they carry outputs) and are gitignored. Edit the `.jl`, not the `.ipynb`.
+
+- `STUDENTS_defect_free_turbu.jl`, `MixingTurbu_Simplified.jl` — tracked sources.
+- Install once: `pip install jupytext`. Opening a `.jl` in Jupyter then auto-creates/syncs its `.ipynb`. From the CLI, `jupytext --sync <file>.jl` regenerates the notebook.
+- Cell boundaries in the `.jl` are `# +` / `# -` (or a blank line); markdown cells are `# ` comment blocks.
 
 ## Running the notebook
 
-Open and run cells in Jupyter with a Julia kernel (IJulia). There is no build step or test suite. The notebook is the entire codebase.
+Open the `.jl` (or its synced `.ipynb`) in Jupyter with a Julia kernel (IJulia) and run the cells. There is no build step or test suite. The notebook is the entire codebase.
 
 To restart a simulation from a saved state, uncomment and adjust the loading block:
 ```julia
