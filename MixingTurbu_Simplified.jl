@@ -269,8 +269,9 @@ for counter = 0:n_time_steps
         # store real-valued snapshots into the concretely-typed Vector{Matrix{Float64}}
         theta_time[trunc(Int,counter/time_gap)+1] = real.(theta)
         conc_time[trunc(Int,counter/time_gap)+1] = real.(conc)
-        Ux_time[trunc(Int,counter/time_gap)+1] = real.( ifft( im * ky .* psi_tr_new) )
-        Uy_time[trunc(Int,counter/time_gap)+1] = real.( ifft( -im * kx .* psi_tr_new) )
+        # psi_tr is (L,L,1) because kx/ky are 3-D; drop the singleton dim to get a Matrix
+        Ux_time[trunc(Int,counter/time_gap)+1] = dropdims( real.( ifft( im * ky .* psi_tr_new) ), dims=3 )
+        Uy_time[trunc(Int,counter/time_gap)+1] = dropdims( real.( ifft( -im * kx .* psi_tr_new) ), dims=3 )
         
         if any(isnan.(theta))
             print("NaNaNaN BATMAN");
