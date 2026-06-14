@@ -267,6 +267,28 @@ end
 # -
 
 # LOOP IN TIME, EACH TIME INVOKING THE FUNCTION TURBU STEP TO PERFORM AN EULER STEP
+
+# --- RUNTIME ESTIMATE ---
+# Before the real run, time a handful of steps and extrapolate. The first call to the
+# function triggers JIT compilation (slow, one-off), so we do one warmup call that we
+# DON'T count, then time n_probe steps. The probe runs on copies of theta/conc, so the
+# actual simulation state below is untouched.
+let
+    theta_probe = copy(theta)
+    conc_probe  = copy(conc)
+
+    update_turbu_and_concentration(theta_probe, conc_probe, A, R, S, Diff, ops)  # warmup: compile, not timed
+
+    n_probe = 5
+    t_probe = @elapsed for _ = 1:n_probe
+        theta_probe, _, conc_probe = update_turbu_and_concentration(theta_probe, conc_probe, A, R, S, Diff, ops)
+    end
+    t_per_step  = t_probe / n_probe
+    est_minutes = t_per_step * (n_time_steps + 1) / 60
+    println("Estimated runtime: ", round(est_minutes, digits = 2), " min  (",
+            round(t_per_step * 1000, digits = 2), " ms/step x ", n_time_steps + 1, " steps)")
+end
+
 print( "Activity: $A, Diffusion: $Diff, time: $T, ")
 for counter = 0:n_time_steps
     
