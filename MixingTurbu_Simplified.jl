@@ -277,9 +277,12 @@ let
     theta_probe = copy(theta)
     conc_probe  = copy(conc)
 
-    update_turbu_and_concentration(theta_probe, conc_probe, A, R, S, Diff, ops)  # warmup: compile, not timed
+    # Two warmup calls: first absorbs JIT compilation, second warms FFTW caches
+    # and any residual lazy-init overhead so neither bleeds into the timed window.
+    theta_probe, _, conc_probe = update_turbu_and_concentration(theta_probe, conc_probe, A, R, S, Diff, ops)
+    theta_probe, _, conc_probe = update_turbu_and_concentration(theta_probe, conc_probe, A, R, S, Diff, ops)
 
-    n_probe = 5
+    n_probe = 20
     t_probe = @elapsed for _ = 1:n_probe
         theta_probe, _, conc_probe = update_turbu_and_concentration(theta_probe, conc_probe, A, R, S, Diff, ops)
     end
