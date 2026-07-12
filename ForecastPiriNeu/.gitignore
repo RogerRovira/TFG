@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Data — SQLite is a rebuildable view; raw archive is backed up off-machine
+*.sqlite
+*.sqlite3
+*.db
+data/
+
+# Secrets & local env
+.env
+
+# OS / editor noise
+.DS_Store
